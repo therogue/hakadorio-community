@@ -19,6 +19,7 @@ from database import (
     calculate_next_occurrence,
     get_conversation,
     save_conversation,
+    new_conversation,
 )
 
 
@@ -514,30 +515,35 @@ class TestConversation:
 
     def test_save_and_get_conversation(self, test_db):
         """Save and retrieve conversation."""
+        conv_id = new_conversation()
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
         ]
-        save_conversation(messages)
+        save_conversation(messages, conv_id)
 
-        retrieved = get_conversation()
-        assert len(retrieved) == 2
-        assert retrieved[0]["content"] == "Hello"
-        assert retrieved[1]["content"] == "Hi there!"
+        result = get_conversation()
+        assert result["id"] == conv_id
+        assert len(result["messages"]) == 2
+        assert result["messages"][0]["content"] == "Hello"
+        assert result["messages"][1]["content"] == "Hi there!"
 
     def test_get_empty_conversation(self, test_db):
-        """Get conversation when none exists."""
-        retrieved = get_conversation()
-        assert retrieved == []
+        """Get conversation when none exists returns id=None and empty messages."""
+        result = get_conversation()
+        assert result["id"] is None
+        assert result["messages"] == []
 
     def test_update_conversation(self, test_db):
         """Update existing conversation."""
-        save_conversation([{"role": "user", "content": "First"}])
+        conv_id = new_conversation()
+        save_conversation([{"role": "user", "content": "First"}], conv_id)
         save_conversation([
             {"role": "user", "content": "First"},
             {"role": "assistant", "content": "Response"},
             {"role": "user", "content": "Second"},
-        ])
+        ], conv_id)
 
-        retrieved = get_conversation()
-        assert len(retrieved) == 3
+        result = get_conversation()
+        assert result["id"] == conv_id
+        assert len(result["messages"]) == 3

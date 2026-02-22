@@ -9,6 +9,17 @@ interface Message {
   content: string
 }
 
+interface ConversationSummary {
+  id: number
+  title: string
+}
+
+interface HistoryPopup {
+  conversations: ConversationSummary[]
+  x: number
+  y: number
+}
+
 const API_URL = 'http://localhost:8000'
 
 function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
@@ -16,7 +27,11 @@ function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [historyPopup, setHistoryPopup] = useState<HistoryPopup | null>(null)
+  const [allChats, setAllChats] = useState<ConversationSummary[] | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const historyBtnRef = useRef<HTMLButtonElement>(null)
+  const historyPopupRef = useRef<HTMLDivElement>(null)
 
   // Load most recent conversation on mount
   useEffect(() => {
@@ -30,10 +45,20 @@ function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
           setMessages(data.messages)
         }
       })
-      .catch(() => {
-        // Ignore errors loading conversation
-      })
+      .catch(() => {})
   }, [])
+
+  // Close history popup on outside click
+  useEffect(() => {
+    if (!historyPopup) return
+    function handleOutsideClick(e: MouseEvent) {
+      if (historyBtnRef.current && historyBtnRef.current.contains(e.target as Node)) return
+      if (historyPopupRef.current && historyPopupRef.current.contains(e.target as Node)) return
+      setHistoryPopup(null)
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [historyPopup])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -47,9 +72,45 @@ function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
       const data = await res.json()
       setMessages([])
       setActiveConversationId(data.id)
-    } catch {
-      // Ignore errors
+    } catch {}
+  }
+
+  async function handleHistoryClick(e: React.MouseEvent<HTMLButtonElement>) {
+    if (historyPopup) {
+      setHistoryPopup(null)
+      return
     }
+    // Capture rect before any await — e.currentTarget is nulled after the event
+    const rect = e.currentTarget.getBoundingClientRect()
+    try {
+      const res = await fetch(`${API_URL}/conversations?limit=3`)
+      const data: ConversationSummary[] = await res.json()
+      setHistoryPopup({
+        conversations: data,
+        x: rect.right,
+        y: rect.bottom + 6,
+      })
+    } catch {}
+  }
+
+  async function handleAllChatsClick() {
+    setHistoryPopup(null)
+    try {
+      const res = await fetch(`${API_URL}/conversations`)
+      const data: ConversationSummary[] = await res.json()
+      setAllChats(data)
+    } catch {}
+  }
+
+  async function switchConversation(id: number) {
+    setHistoryPopup(null)
+    setAllChats(null)
+    try {
+      const res = await fetch(`${API_URL}/conversations/${id}`)
+      const data = await res.json()
+      setActiveConversationId(data.id)
+      setMessages(Array.isArray(data.messages) ? data.messages : [])
+    } catch {}
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -69,10 +130,9 @@ function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
         body: JSON.stringify({ messages: newMessages, conversation_id: activeConversationId }),
       })
       const data = await res.json()
-
       setMessages([...newMessages, { role: 'assistant', content: data.response }])
       onTasksUpdate()
-    } catch (err) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: 'Error connecting to server' },
@@ -86,14 +146,29 @@ function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
     <div className="chat-panel">
       <div className="chat-header">
         <h2>Chat</h2>
-        <button
-          className="new-chat-btn"
-          onClick={handleNewChat}
-          disabled={loading}
-          title="Start a new conversation"
-        >
-          New Chat
-        </button>
+        <div className="chat-header-actions">
+          <button
+            ref={historyBtnRef}
+            className="history-btn"
+            onClick={handleHistoryClick}
+            title="Chat history"
+            type="button"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+          </button>
+          <button
+            className="new-chat-btn"
+            onClick={handleNewChat}
+            disabled={loading}
+            title="Start a new conversation"
+          >
+            New Chat
+          </button>
+        </div>
       </div>
       <div className="chat-messages">
         {messages.map((msg, i) => (
@@ -117,6 +192,56 @@ function ChatInterface({ onTasksUpdate }: ChatInterfaceProps) {
           Send
         </button>
       </form>
+
+      {historyPopup && (
+        <div
+          ref={historyPopupRef}
+          className="history-popup"
+          style={{
+            left: historyPopup.x,
+            top: Math.max(8, Math.min(historyPopup.y, window.innerHeight - 200)),
+            transform: 'translateX(-100%)',
+          }}
+        >
+          {historyPopup.conversations.map((c) => (
+            <div
+              key={c.id}
+              className={`history-popup-item${c.id === activeConversationId ? ' history-popup-item--active' : ''}`}
+              onClick={() => switchConversation(c.id)}
+            >
+              {c.title || 'Untitled'}
+            </div>
+          ))}
+          <div className="history-popup-item history-popup-all" onClick={handleAllChatsClick}>
+            All Chats
+          </div>
+        </div>
+      )}
+
+      {allChats !== null && (
+        <div className="all-chats-overlay" onClick={() => setAllChats(null)}>
+          <div className="all-chats-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="all-chats-header">
+              <span>All Chats</span>
+              <button className="all-chats-close" onClick={() => setAllChats(null)} type="button">✕</button>
+            </div>
+            <div className="all-chats-list">
+              {allChats.length === 0 && (
+                <div className="all-chats-empty">No conversations yet.</div>
+              )}
+              {allChats.map((c) => (
+                <div
+                  key={c.id}
+                  className={`all-chats-item${c.id === activeConversationId ? ' all-chats-item--active' : ''}`}
+                  onClick={() => switchConversation(c.id)}
+                >
+                  {c.title || 'Untitled'}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
