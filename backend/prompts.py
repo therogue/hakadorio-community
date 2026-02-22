@@ -45,6 +45,17 @@ Duration estimation:
 - Default to 15 if truly uncertain.
 - Always set duration_minutes to the user-specified duration, if present; otherwise, use your estimated duration
 
+Priority estimation:
+- When creating a task, assign a priority level (integer 0-4):
+  - 4 = Critical: urgent and important, immediate attention needed
+  - 3 = High: important, should be done soon
+  - 2 = Medium: normal priority (default)
+  - 1 = Low: can wait, not time-sensitive
+  - 0 = None: no priority, backlog item
+- If the user specifies a priority, use that value.
+- Otherwise, estimate based on the task description and context.
+- Default to 2 (Medium) if truly uncertain.
+
 Respond with this exact JSON format:
 {{
     "operation": "create" | "update" | "delete",
@@ -53,18 +64,13 @@ Respond with this exact JSON format:
     "scheduled_date": "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM" or null,
     "recurrence_rule": "pattern" or null,
     "duration_minutes": integer or null,
+    "priority": integer (0-4) or null,
     "completed": true | false | null,
-    "message": "friendly response to user"
+    "message": "friendly response to user (for create operations, mention the estimated duration and assigned priority)"
 }}
 
 For update/delete operations, you can use "task_key" instead of "title" to identify the task (e.g., "M-01").
 For update operation, include any fields to change. Only fields provided will be updated.
-Task identification:
-- You will receive a list of current tasks with their task_key and title
-- Use task_key for reliable identification (e.g., "M-01")
-- Or match by title from the provided task list
-- For complete/delete/schedule/set_recurrence/remove_recurrence operations, use task_key when available
-
 Task identification:
 - You will receive a list of current tasks with their task_key and title
 - Use task_key for reliable identification (e.g., "M-01")

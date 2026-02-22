@@ -13,6 +13,7 @@ interface Task {
   is_template: boolean
   parent_task_id: string | null
   duration_minutes: number | null
+  priority: number | null  // 0=None, 1=Low, 2=Medium, 3=High, 4=Critical
   projected?: boolean
 }
 
@@ -71,6 +72,33 @@ const TrashIcon = () => (
     <line x1="14" y1="11" x2="14" y2="17" />
   </svg>
 )
+
+// Priority badge: maps priority int to label and CSS class
+// Assumption: priority is 0-4 or null
+const PRIORITY_CONFIG: Record<number, { label: string; className: string; description: string }> = {
+  4: { label: 'C', className: 'priority-critical', description: 'Critical' },
+  3: { label: 'H', className: 'priority-high', description: 'High' },
+  2: { label: 'M', className: 'priority-medium', description: 'Medium' },
+  1: { label: 'L', className: 'priority-low', description: 'Low' },
+  0: { label: '-', className: 'priority-none', description: 'None' },
+}
+
+function PriorityBadge({ priority }: { priority: number | null }) {
+  if (priority === null || priority === undefined) return null
+  const config = PRIORITY_CONFIG[priority]
+  if (!config) return null
+  return <span className={`priority-badge ${config.className}`} title={config.description}>{config.label}</span>
+}
+
+// Format duration_minutes for display (e.g. 90 -> "1h 30m", 60 -> "1h", 15 -> "15m")
+function formatDuration(minutes: number | null): string | null {
+  if (minutes === null || minutes === undefined || minutes <= 0) return null
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
+}
 
 const HOUR_HEIGHT = 60 // px per hour; 1px per minute
 const CALENDAR_TOTAL_HEIGHT = 24 * HOUR_HEIGHT // 1440px
@@ -236,7 +264,11 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
           onClick={(e) => e.stopPropagation()}
         />
         <span className="task-key">{task.task_key}</span>
+        <PriorityBadge priority={task.priority} />
         <span className="task-title">{task.title}</span>
+        {formatDuration(task.duration_minutes) && (
+          <span className="task-duration">{formatDuration(task.duration_minutes)}</span>
+        )}
         {task.recurrence_rule && (
           <span className="task-recurring" title={`Repeats: ${task.recurrence_rule}`}>&#x21bb;</span>
         )}
@@ -399,6 +431,7 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
                     onClick={(e) => e.stopPropagation()}
                   />
                   <span className="calendar-task-key">{task.task_key}</span>
+                  <PriorityBadge priority={task.priority} />
                   <span className="calendar-task-title">{task.title}</span>
                   <button
                     type="button"
