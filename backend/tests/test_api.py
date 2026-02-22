@@ -80,10 +80,12 @@ class TestConversationEndpoint:
     """Tests for /conversation endpoint."""
 
     def test_get_conversation_empty(self, app_client):
-        """GET /conversation returns empty list when no conversation."""
+        """GET /conversation returns id=None and empty messages when no conversation exists."""
         response = app_client.get("/conversation")
         assert response.status_code == 200
-        assert response.json() == []
+        data = response.json()
+        assert data["id"] is None
+        assert data["messages"] == []
 
 
 class TestTemplateInstanceBehavior:

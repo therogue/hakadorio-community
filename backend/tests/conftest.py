@@ -46,8 +46,9 @@ def test_db(monkeypatch, tmp_path):
         );
 
         CREATE TABLE conversations (
-            id INTEGER PRIMARY KEY,
-            messages TEXT NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            messages TEXT NOT NULL DEFAULT '[]',
+            title TEXT NOT NULL DEFAULT 'Untitled',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
