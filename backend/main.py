@@ -21,7 +21,9 @@ from database import (
     find_task_by_key_db,
     get_conversation,
     save_conversation,
-    new_conversation
+    new_conversation,
+    list_conversations,
+    get_conversation_by_id,
 )
 
 load_dotenv()
@@ -88,6 +90,21 @@ def new_conversation_endpoint() -> dict:
     """Archive current conversation and start a new one."""
     conv_id = new_conversation()
     return {"id": conv_id}
+
+
+@app.get("/conversations")
+def list_conversations_endpoint(limit: int | None = None) -> list[dict]:
+    """List conversations ordered by recency. Optionally limit to N most recent."""
+    return list_conversations(limit)
+
+
+@app.get("/conversations/{conversation_id}")
+def get_conversation_by_id_endpoint(conversation_id: int) -> dict:
+    """Get messages for a specific conversation."""
+    result = get_conversation_by_id(conversation_id)
+    if result["id"] is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return result
 
 
 def find_task(title: str = None, task_key: str = None) -> Task | None:

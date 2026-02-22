@@ -593,3 +593,23 @@ def new_conversation() -> int:
         )
         conn.commit()
         return cursor.lastrowid
+
+def list_conversations(limit: int | None = None) -> list[dict]:
+    """Return conversations ordered by updated_at DESC. Each dict has id, title, updated_at."""
+    with get_db() as conn:
+        query = "SELECT id, title, updated_at FROM conversations ORDER BY updated_at DESC"
+        if limit is not None:
+            query += f" LIMIT {int(limit)}"
+        rows = conn.execute(query).fetchall()
+        return [{"id": row["id"], "title": row["title"], "updated_at": row["updated_at"]} for row in rows]
+
+def get_conversation_by_id(conversation_id: int) -> dict:
+    """Return {id, messages} for the given conversation_id, or {id: None, messages: []} if not found."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, messages FROM conversations WHERE id = ?",
+            (conversation_id,)
+        ).fetchone()
+        if row:
+            return {"id": row["id"], "messages": json.loads(row["messages"])}
+        return {"id": None, "messages": []}
