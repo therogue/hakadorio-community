@@ -247,7 +247,8 @@ body {
   min-width: 3rem;
 }
 
-.task-date {
+.task-date,
+.task-duration {
   font-size: 0.75rem;
   color: #607080;
 }

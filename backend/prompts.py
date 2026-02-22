@@ -66,17 +66,11 @@ Respond with this exact JSON format:
     "duration_minutes": integer or null,
     "priority": integer (0-4) or null,
     "completed": true | false | null,
-    "message": "friendly response to user"
+    "message": "friendly response to user (for create operations, mention the estimated duration and assigned priority)"
 }}
 
 For update/delete operations, you can use "task_key" instead of "title" to identify the task (e.g., "M-01").
 For update operation, include any fields to change. Only fields provided will be updated.
-Task identification:
-- You will receive a list of current tasks with their task_key and title
-- Use task_key for reliable identification (e.g., "M-01")
-- Or match by title from the provided task list
-- For complete/delete/schedule/set_recurrence/remove_recurrence operations, use task_key when available
-
 Task identification:
 - You will receive a list of current tasks with their task_key and title
 - Use task_key for reliable identification (e.g., "M-01")
