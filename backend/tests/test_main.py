@@ -8,7 +8,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import create_task_db, get_all_tasks
+from database import create_task_db, get_all_tasks, get_tasks_for_date
 from prompts import SYSTEM_PROMPT
 
 
@@ -68,3 +68,33 @@ class TestSystemPromptTaskContext:
     def test_system_prompt_mentions_task_context(self, test_db):
         """System prompt mentions task list will be provided."""
         assert "task_key" in SYSTEM_PROMPT.lower() or "current tasks" in SYSTEM_PROMPT.lower()
+
+
+class TestDayViewExcludesUnscheduledTasks:
+    """Unscheduled tasks must not appear in day view (Issue #16)."""
+
+    def test_unscheduled_task_excluded_from_today(self, test_db):
+        """Tasks with no scheduled_date do not appear in get_tasks_for_date for today."""
+        today = "2026-02-23"
+        create_task_db("id-unscheduled", "Unscheduled task", "T")
+
+        result = get_tasks_for_date(today, today)
+        ids = [t.id for t in result]
+        assert "id-unscheduled" not in ids
+
+    def test_scheduled_task_appears_in_day_view(self, test_db):
+        """Tasks with a matching scheduled_date still appear in day view."""
+        today = "2026-02-23"
+        create_task_db("id-scheduled", "Scheduled task", "T", today)
+
+        result = get_tasks_for_date(today, today)
+        ids = [t.id for t in result]
+        assert "id-scheduled" in ids
+
+    def test_unscheduled_task_appears_in_get_all_tasks(self, test_db):
+        """Unscheduled tasks are still returned by get_all_tasks (for backlog tab)."""
+        create_task_db("id-backlog", "Backlog task", "T")
+
+        all_tasks = get_all_tasks()
+        ids = [t.id for t in all_tasks]
+        assert "id-backlog" in ids
