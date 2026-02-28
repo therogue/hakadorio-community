@@ -71,10 +71,11 @@ class TestBuildScheduleContext:
             _task("M-02", "Meeting B", "2026-02-22T10:00", 60),
         ]
         result = build_schedule_context(tasks)
+        gaps_line = [l for l in result.splitlines() if "gaps:" in l][0]
         # No gap between adjacent meetings
-        assert "09:00-10:00" not in result
-        # Gap after both meetings
-        assert "11:00-17:00" in result
+        assert "09:00" not in gaps_line
+        # Only gap is after both meetings
+        assert "11:00-17:00" in gaps_line
 
     def test_task_outside_business_hours_does_not_create_biz_gap(self):
         # Task before business hours — should not show up as a gap

@@ -495,21 +495,19 @@ def new_conversation() -> int:
 
 def list_conversations(limit: int | None = None) -> list[dict]:
     """Return conversations ordered by updated_at DESC. Each dict has id, title, updated_at."""
-    with get_db() as conn:
-        query = "SELECT id, title, updated_at FROM conversations ORDER BY updated_at DESC"
+    with Session(engine) as session:
+        statement = select(Conversation).order_by(Conversation.updated_at.desc())
         if limit is not None:
-            query += f" LIMIT {int(limit)}"
-        rows = conn.execute(query).fetchall()
-        return [{"id": row["id"], "title": row["title"], "updated_at": row["updated_at"]} for row in rows]
+            statement = statement.limit(limit)
+        convs = session.exec(statement).all()
+        return [{"id": c.id, "title": c.title, "updated_at": c.updated_at} for c in convs]
+
 
 def get_conversation_by_id(conversation_id: int) -> dict:
     """Return {id, messages} for the given conversation_id, or {id: None, messages: []} if not found."""
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT id, messages FROM conversations WHERE id = ?",
-            (conversation_id,)
-        ).fetchone()
-        if row:
-            return {"id": row["id"], "messages": json.loads(row["messages"])}
+    with Session(engine) as session:
+        conv = session.get(Conversation, conversation_id)
+        if conv:
+            return {"id": conv.id, "messages": json.loads(conv.messages)}
         return {"id": None, "messages": []}
 
