@@ -20,7 +20,7 @@ interface Task {
   projected?: boolean
 }
 
-type ViewMode = 'day' | 'all' | 'completed'
+type ViewMode = 'day' | 'all' | 'completed' | 'backlog'
 
 const API_URL = 'http://localhost:8000'
 

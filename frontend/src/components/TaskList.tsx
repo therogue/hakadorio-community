@@ -16,7 +16,7 @@ interface Task {
   priority: number | null  // 0=None, 1=Low, 2=Medium, 3=High, 4=Critical
 }
 
-type ViewMode = 'day' | 'all' | 'completed'
+type ViewMode = 'day' | 'all' | 'completed' | 'backlog'
 type DayViewMode = 'list' | 'calendar'
 
 interface TaskListProps {
@@ -589,6 +589,47 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
     )
   }
 
+  function renderBacklogView() {
+    const meetings = tasks.filter(t =>
+      t.category === 'M' && !t.is_template && !t.completed && !t.scheduled_date
+    )
+    const regularTasks = tasks.filter(t =>
+      t.category === 'T' && !t.is_template && !t.completed && !t.scheduled_date
+    )
+    const projectTasks = tasks.filter(t =>
+      !t.is_template && !['M', 'T', 'D'].includes(t.category) && !t.completed && !t.scheduled_date
+    )
+    const projectCategories = [...new Set(projectTasks.map(t => t.category))].sort()
+
+    const isEmpty = meetings.length === 0 && regularTasks.length === 0 && projectTasks.length === 0
+    const ordered: Task[] = [
+      ...meetings,
+      ...regularTasks,
+      ...projectCategories.flatMap(cat => projectTasks.filter(t => t.category === cat)),
+    ]
+    orderedVisibleTasksRef.current = ordered
+
+    let sectionStart = 0
+    return (
+      <>
+        {isEmpty ? (
+          <p className="empty-state">No backlog tasks.</p>
+        ) : (
+          <>
+            {renderSection('Meetings', meetings, true, sectionStart)}
+            {renderSection('Tasks', regularTasks, true, sectionStart += meetings.length)}
+            {projectCategories.map(cat => {
+              const catTasks = projectTasks.filter(t => t.category === cat)
+              const si = sectionStart
+              sectionStart += catTasks.length
+              return renderSection(cat, catTasks, true, si)
+            })}
+          </>
+        )}
+      </>
+    )
+  }
+
   return (
     <div className="task-panel">
       <div className="tab-bar">
@@ -609,6 +650,12 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
           onClick={() => onViewModeChange('completed')}
         >
           Completed
+        </button>
+        <button
+          className={`tab ${viewMode === 'backlog' ? 'active' : ''}`}
+          onClick={() => onViewModeChange('backlog')}
+        >
+          Backlog
         </button>
       </div>
 
@@ -633,6 +680,7 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
         {viewMode === 'day' && renderDayView()}
         {viewMode === 'all' && renderAllTasksView(false)}
         {viewMode === 'completed' && renderAllTasksView(true)}
+        {viewMode === 'backlog' && renderBacklogView()}
       </div>
     </div>
   )
