@@ -27,9 +27,12 @@ from database import (
     get_conversation_by_id,
     get_user_settings,
     update_user_settings,
+    get_conversation_title,
+    update_conversation_title,
 )
 
 load_dotenv()
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -37,6 +40,7 @@ async def lifespan(_app: FastAPI):
     init_db()
     yield
     # Shutdown (nothing to do)
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -50,7 +54,6 @@ app.add_middleware(
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-
 
 
 @app.get("/tasks")
@@ -123,7 +126,7 @@ def patch_settings(data: UserSettingsUpdate) -> UserSettingsRead:
 
 def _time_to_minutes(scheduled_date: str) -> int:
     """Parse YYYY-MM-DDTHH:MM and return minutes since midnight."""
-    h, m = map(int, scheduled_date[11:16].split(':'))
+    h, m = map(int, scheduled_date[11:16].split(":"))
     return h * 60 + m
 
 
@@ -136,7 +139,7 @@ def _resolve_conflicts(
     """Find tasks overlapping new_scheduled_date's time slot and apply conflict_resolution."""
     if conflict_resolution == "overlap":
         return
-    if not new_scheduled_date or 'T' not in new_scheduled_date:
+    if not new_scheduled_date or "T" not in new_scheduled_date:
         return
 
     new_date = new_scheduled_date[:10]
@@ -146,7 +149,7 @@ def _resolve_conflicts(
     for task in get_all_tasks():
         if task.id == exclude_task_id or task.completed or task.is_template:
             continue
-        if not task.scheduled_date or 'T' not in task.scheduled_date:
+        if not task.scheduled_date or "T" not in task.scheduled_date:
             continue
         if task.scheduled_date[:10] != new_date:
             continue
@@ -157,6 +160,36 @@ def _resolve_conflicts(
                 update_task_db(task.id, scheduled_date=task.scheduled_date[:10])
             elif conflict_resolution == "backlog":
                 update_task_db(task.id, scheduled_date=None)
+
+
+@app.patch("/conversations/{conversation_id}/title")
+def update_conversation_title_endpoint(conversation_id: int, body: dict) -> dict:
+    """Set the title of a conversation."""
+    title = body.get("title", "")
+    if not isinstance(title, str) or not title.strip():
+        raise HTTPException(status_code=422, detail="title must be a non-empty string")
+    update_conversation_title(conversation_id, title.strip())
+    return {"id": conversation_id, "title": title.strip()}
+
+
+async def generate_conversation_title(messages: list[dict]) -> str | None:
+    """Call Claude with TITLE_PROMPT to produce a short descriptive title. Returns None on failure.
+    Only the first user message is sent — the assistant's reply is structured task metadata, not useful context.
+    """
+    first_user = next((m["content"] for m in messages if m.get("role") == "user"), None)
+    if not first_user:
+        return None
+    try:
+        response = await client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=20,
+            system=TITLE_PROMPT,
+            messages=[{"role": "user", "content": first_user}],
+        )
+        title = response.content[0].text.strip()
+        return title if title else None
+    except Exception:
+        return None
 
 
 def find_task(title: str = None, task_key: str = None) -> Task | None:
@@ -179,7 +212,9 @@ def strip_markdown_(text: str) -> str:
     return "\n".join(lines)
 
 
-def execute_operation(parsed: dict, today: str, conflict_resolution: str = "overlap") -> str:
+def execute_operation(
+    parsed: dict, today: str, conflict_resolution: str = "overlap"
+) -> str:
     """
     Execute a task operation based on parsed Claude response.
     Returns the message to display to the user.
@@ -211,10 +246,12 @@ def execute_operation(parsed: dict, today: str, conflict_resolution: str = "over
             recurrence_rule,
             is_template=is_template,
             duration_minutes=duration_minutes,
-            priority=priority
+            priority=priority,
         )
-        if effective_date and 'T' in effective_date:
-            _resolve_conflicts(effective_date, duration_minutes or 15, task_id, conflict_resolution)
+        if effective_date and "T" in effective_date:
+            _resolve_conflicts(
+                effective_date, duration_minutes or 15, task_id, conflict_resolution
+            )
         return message
 
     # Update and delete operations require finding the task first
@@ -246,7 +283,7 @@ def execute_operation(parsed: dict, today: str, conflict_resolution: str = "over
         if updates:
             update_task_db(task.id, **updates)
             new_sched = updates.get("scheduled_date")
-            if new_sched and 'T' in new_sched:
+            if new_sched and "T" in new_sched:
                 dur = updates.get("duration_minutes") or task.duration_minutes or 15
                 _resolve_conflicts(new_sched, dur, task.id, conflict_resolution)
 
@@ -267,7 +304,9 @@ async def chat(chat_request: ChatRequest) -> dict:
         return {"response": "API key not configured", "tasks": get_all_tasks()}
 
     # Convert messages to Claude API format
-    api_messages = [{"role": m.role, "content": m.content} for m in chat_request.messages]
+    api_messages = [
+        {"role": m.role, "content": m.content} for m in chat_request.messages
+    ]
 
     # Insert today's date into the system prompt
     today = datetime.now().strftime("%Y-%m-%d")
@@ -284,7 +323,9 @@ async def chat(chat_request: ChatRequest) -> dict:
     # Add current tasks to system prompt for context
     tasks = get_all_tasks()
     if tasks:
-        task_list = "\n".join([f"- {task.task_key}: {task.title}" for task in tasks if not task.completed])
+        task_list = "\n".join(
+            [f"- {task.task_key}: {task.title}" for task in tasks if not task.completed]
+        )
         system_prompt += f"\n\nCurrent incomplete tasks:\n{task_list}"
 
     # Add today's schedule context for auto-scheduling
@@ -299,7 +340,7 @@ async def chat(chat_request: ChatRequest) -> dict:
             model="claude-sonnet-4-5",
             max_tokens=256,
             system=system_prompt,
-            messages=api_messages
+            messages=api_messages,
         )
     except anthropic.APIError as e:
         return {"response": f"API error: {e}", "tasks": get_all_tasks()}
@@ -315,14 +356,34 @@ async def chat(chat_request: ChatRequest) -> dict:
     message = execute_operation(parsed, today, settings.conflict_resolution)
 
     # Save conversation with assistant response
-    conversation = [{"role": m.role, "content": m.content} for m in chat_request.messages]
+    conversation = [
+        {"role": m.role, "content": m.content} for m in chat_request.messages
+    ]
     conversation.append({"role": "assistant", "content": message})
+
+    title: str | None = None
     if chat_request.conversation_id is not None:
+        # Check title before saving so we know whether to generate one
+        was_untitled = (
+            get_conversation_title(chat_request.conversation_id) == "Untitled"
+        )
         save_conversation(conversation, chat_request.conversation_id)
 
-    return {"response": message, "tasks": get_all_tasks()}
+        if was_untitled:
+            generated = await generate_conversation_title(conversation)
+            if generated:
+                update_conversation_title(chat_request.conversation_id, generated)
+                title = generated
+            else:
+                # Fallback: save_conversation already set the 50-char title
+                title = get_conversation_title(chat_request.conversation_id)
+        else:
+            title = get_conversation_title(chat_request.conversation_id)
+
+    return {"response": message, "tasks": get_all_tasks(), "title": title}
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
