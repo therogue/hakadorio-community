@@ -501,23 +501,28 @@ def get_conversation() -> dict:
         return {"id": None, "messages": []}
 
 
-def save_conversation(messages: list[dict], conversation_id: int):
-    """Save conversation messages for the given conversation_id."""
-    now = datetime.now().isoformat()
+def load_conversation(conversation_id: int) -> Optional[Conversation]:
+    """Load a conversation by ID. Returns detached Conversation object, or None if not found."""
+    with Session(engine) as session:
+        conv = session.get(Conversation, conversation_id)
+        if not conv:
+            return None
+        return conv.model_copy()
+
+
+def save_conversation(conversation_id: int, messages: str, title: Optional[str] = None) -> None:
+    """Update a conversation's messages and optionally its title."""
+    # messages is expected to be a JSON-serialized list; treat "" and "[]" as empty
+    if not messages or messages.strip() == "[]":
+        return
     with Session(engine) as session:
         conv = session.get(Conversation, conversation_id)
         if not conv:
             return
-
-        conv.messages = json.dumps(messages)
-        conv.updated_at = now
-
-        # Auto-title from first user message if still default
-        if conv.title == "Untitled":
-            first_user = next((m["content"] for m in messages if m.get("role") == "user"), None)
-            if first_user:
-                conv.title = first_user[:50]
-
+        conv.messages = messages
+        if title is not None:
+            conv.title = title
+        conv.updated_at = datetime.now().isoformat()
         session.commit()
 
 
@@ -548,4 +553,20 @@ def get_conversation_by_id(conversation_id: int) -> dict:
         if conv:
             return {"id": conv.id, "messages": json.loads(conv.messages)}
         return {"id": None, "messages": []}
+
+
+def get_conversation_title(conversation_id: int) -> Optional[str]:
+    """Return the title of the conversation, or None if not found."""
+    with Session(engine) as session:
+        conv = session.get(Conversation, conversation_id)
+        return conv.title if conv else None
+
+
+def update_conversation_title(conversation_id: int, title: str):
+    """Set the title of a conversation."""
+    with Session(engine) as session:
+        conv = session.get(Conversation, conversation_id)
+        if conv:
+            conv.title = title
+            session.commit()
 
