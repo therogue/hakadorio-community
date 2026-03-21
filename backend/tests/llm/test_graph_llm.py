@@ -1,19 +1,19 @@
 """
 LLM-as-a-judge integration tests for graph.py.
 Makes REAL Anthropic API calls — requires ANTHROPIC_API_KEY in .env.
-Run with: pytest tests/test_graph_llm.py -v -s
+Run with: pytest --run-llm -v -s
 """
 
 import json
 import os
-import sys
 
 import anthropic
 import pytest
 from dotenv import load_dotenv
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+
+pytestmark = pytest.mark.llm
 
 from database import create_task_db, get_all_tasks
 from graph import classify_intent, execute_operation, execute_reschedule, GraphState

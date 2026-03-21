@@ -2,11 +2,6 @@
 Tests for graph.py — helpers, routing, scoped lookups, and apply_operation.
 Does NOT test LLM-calling nodes (classify_intent, execute_operation, execute_reschedule).
 """
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from database import create_task_db, get_all_tasks, update_task_db
 from graph import (
     _strip_markdown,
