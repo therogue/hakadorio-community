@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { computeColumnLayout, DEFAULT_DURATION, pxToSnappedMinutes, minutesToTimeStr } from '../utils/calendarLayout'
 import { formatTaskCreationDate } from '../utils/date'
+import { moveTasksToBacklog } from '../utils/taskApi'
 
 interface Task {
   id: string
@@ -171,6 +172,14 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
       x: e.clientX,
       y: e.clientY,
     })
+  }
+
+  async function handleMoveToBacklog() {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    await moveTasksToBacklog(ids, API_URL)
+    setSelectedIds(new Set())
+    onTasksUpdate()
   }
 
   function handleDeleteSelected(e: React.MouseEvent) {
@@ -710,6 +719,9 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
             <div className="day-view-actions">
               <button type="button" className="reschedule-selected-btn" onClick={openReschedulePopup}>
                 Reschedule
+              </button>
+              <button type="button" className="move-to-backlog-btn" onClick={handleMoveToBacklog}>
+                Move to Backlog
               </button>
               <button type="button" className="delete-selected-btn" onClick={handleDeleteSelected}>
                 <TrashIcon /> Delete
