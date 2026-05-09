@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { moveTasksToBacklog } from './taskApi'
+import { moveTasksToBacklog, getMoveToBacklogLabel } from './taskApi'
 
 const API_URL = 'http://localhost:8000'
 
 beforeEach(() => {
   vi.restoreAllMocks()
+})
+
+describe('getMoveToBacklogLabel', () => {
+  it('returns "Move to Backlog" for a single task', () => {
+    expect(getMoveToBacklogLabel(1)).toBe('Move to Backlog')
+  })
+
+  it('returns "Move all to Backlog" for multiple tasks', () => {
+    expect(getMoveToBacklogLabel(2)).toBe('Move all to Backlog')
+    expect(getMoveToBacklogLabel(10)).toBe('Move all to Backlog')
+  })
 })
 
 describe('moveTasksToBacklog', () => {
@@ -47,5 +58,12 @@ describe('moveTasksToBacklog', () => {
     await moveTasksToBacklog([], API_URL)
 
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('throws when the server returns a non-ok response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(moveTasksToBacklog(['id-1'], API_URL)).rejects.toThrow('404')
   })
 })

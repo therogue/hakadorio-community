@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { computeColumnLayout, DEFAULT_DURATION, pxToSnappedMinutes, minutesToTimeStr } from '../utils/calendarLayout'
 import { formatTaskCreationDate } from '../utils/date'
-import { moveTasksToBacklog } from '../utils/taskApi'
+import { moveTasksToBacklog, getMoveToBacklogLabel } from '../utils/taskApi'
 
 interface Task {
   id: string
@@ -721,7 +721,7 @@ function TaskList({ tasks, viewMode, selectedDate, todayStr, onViewModeChange, o
                 Reschedule
               </button>
               <button type="button" className="move-to-backlog-btn" onClick={handleMoveToBacklog}>
-                Move to Backlog
+                {getMoveToBacklogLabel(selectedIds.size)}
               </button>
               <button type="button" className="delete-selected-btn" onClick={handleDeleteSelected}>
                 <TrashIcon /> Delete

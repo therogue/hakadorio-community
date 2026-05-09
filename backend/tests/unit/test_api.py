@@ -220,3 +220,23 @@ class TestBulkMoveToBacklog:
         """POST with a non-existent task ID returns 404."""
         response = app_client.post("/tasks/bulk-move-to-backlog", json={"task_ids": ["ghost-id"]})
         assert response.status_code == 404
+
+    def test_bulk_move_partial_failure_updates_preceding_tasks(self, test_db, app_client):
+        """Valid IDs before an unknown ID are updated; the request returns 404."""
+        create_task_db("id-1", "Task 1", "T", "2026-05-02")
+
+        response = app_client.post("/tasks/bulk-move-to-backlog", json={"task_ids": ["id-1", "ghost-id"]})
+
+        assert response.status_code == 404
+        # id-1 was updated before the 404 — partial write is the current behaviour
+        all_tasks = {t["id"]: t for t in app_client.get("/tasks").json()}
+        assert all_tasks["id-1"]["scheduled_date"] is None
+
+    def test_bulk_move_already_backlogged_task_is_idempotent(self, test_db, app_client):
+        """Moving a task already in the backlog (scheduled_date=None) returns 200."""
+        create_task_db("id-1", "Task 1", "T")  # no scheduled_date — already in backlog
+
+        response = app_client.post("/tasks/bulk-move-to-backlog", json={"task_ids": ["id-1"]})
+
+        assert response.status_code == 200
+        assert response.json()[0]["scheduled_date"] is None
