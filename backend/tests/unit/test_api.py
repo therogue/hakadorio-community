@@ -224,3 +224,44 @@ class TestSettingsEndpoints:
         response = app_client.get("/settings")
         assert response.status_code == 200
         assert response.json()["default_priority"] == "none"
+
+
+class TestMoveToBacklog:
+    """Tests for move-to-backlog via PATCH /tasks/{id} (Issue #66).
+
+    The frontend sends parallel PATCH requests with scheduled_date=null,
+    consistent with bulk-complete and bulk-delete patterns.
+    """
+
+    def test_patch_clears_scheduled_date(self, test_db, app_client):
+        """PATCH with scheduled_date=null moves a task to backlog."""
+        create_task_db("id-1", "Task 1", "T", "2026-05-02")
+
+        response = app_client.patch("/tasks/id-1", json={"scheduled_date": None})
+
+        assert response.status_code == 200
+        assert response.json()["scheduled_date"] is None
+
+    def test_patch_does_not_affect_other_tasks(self, test_db, app_client):
+        """Patching one task does not modify others."""
+        create_task_db("id-1", "Task 1", "T", "2026-05-02")
+        create_task_db("id-2", "Task 2", "T", "2026-05-02")
+
+        app_client.patch("/tasks/id-1", json={"scheduled_date": None})
+
+        all_tasks = {t["id"]: t for t in app_client.get("/tasks").json()}
+        assert all_tasks["id-2"]["scheduled_date"] == "2026-05-02"
+
+    def test_patch_unknown_id_returns_404(self, app_client):
+        """PATCH with a non-existent task ID returns 404."""
+        response = app_client.patch("/tasks/ghost-id", json={"scheduled_date": None})
+        assert response.status_code == 404
+
+    def test_patch_already_backlogged_task_is_idempotent(self, test_db, app_client):
+        """Patching a task already in the backlog (scheduled_date=None) returns 200."""
+        create_task_db("id-1", "Task 1", "T")  # no scheduled_date — already in backlog
+
+        response = app_client.patch("/tasks/id-1", json={"scheduled_date": None})
+
+        assert response.status_code == 200
+        assert response.json()["scheduled_date"] is None

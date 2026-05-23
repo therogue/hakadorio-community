@@ -66,6 +66,7 @@ class UserSettingsUpdate(SQLModel):
     conflict_resolution: Optional[str] = None
 
 
+
 class Message(SQLModel):
     role: str
     content: str

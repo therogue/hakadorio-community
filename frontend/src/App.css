@@ -427,6 +427,23 @@ body {
   border-color: #8aaae0;
 }
 
+.move-to-backlog-btn {
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: #c9a72a;
+  border: 1px solid #c9a72a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.move-to-backlog-btn:hover {
+  background: rgba(201, 167, 42, 0.15);
+  color: #e0c44a;
+  border-color: #e0c44a;
+}
+
 .reschedule-popup {
   min-width: 220px;
 }
