@@ -31,6 +31,8 @@ from database import (
     update_user_settings,
     get_conversation_title,
     update_conversation_title,
+    build_day_summary_facts,
+    find_conversation_by_title_substring,
 )
 
 load_dotenv()
@@ -179,6 +181,70 @@ def update_conversation_title_endpoint(conversation_id: int, body: dict) -> dict
         raise HTTPException(status_code=422, detail="title must be a non-empty string")
     update_conversation_title(conversation_id, title.strip())
     return {"id": conversation_id, "title": title.strip()}
+
+
+async def generate_day_summary(today: str) -> str:
+    """Generate a 1-2 sentence overview of today's schedule via the LLM.
+    Tests monkeypatch this; production call is keyed on build_day_summary_facts.
+    """
+    facts = build_day_summary_facts(today)
+    prompt = (
+        f"You are summarizing today's schedule. Today is {today}.\n\n"
+        f"Facts:\n"
+        f"- Meetings: {facts['meeting_count']}\n"
+        f"- First meeting: {facts['first_meeting_time'] or 'none'}\n"
+        f"- Last meeting: {facts['last_meeting_time'] or 'none'}\n"
+        f"- Top priority task: {facts['top_priority_title'] or 'none'}\n"
+        f"- Total scheduled minutes: {facts['total_duration_minutes']}\n"
+        f"- Overdue tasks: {facts['overdue_count']}\n\n"
+        f"Write a brief 1-2 sentence overview."
+    )
+    try:
+        response = await client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception:
+        return "Unable to generate day summary."
+
+
+@app.post("/day-summary")
+async def day_summary_endpoint() -> dict:
+    """First call of day creates a conversation titled today's date with the LLM-generated
+    summary as the first assistant message. Subsequent calls (with a conversation whose title
+    still contains today's date) return the existing conversation without regenerating.
+    Title-rename to omit today's date causes the next call to regenerate (AC7).
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    existing = find_conversation_by_title_substring(today)
+    if existing is not None:
+        # Return existing conv's first assistant message; do NOT regenerate.
+        # Assumption: messages is JSON-encoded list of {role, content} dicts (Conversation model).
+        try:
+            messages = json.loads(existing.messages)
+        except (ValueError, TypeError):
+            messages = []
+        first_assistant = next(
+            (m["content"] for m in messages if m.get("role") == "assistant" and "content" in m),
+            "",
+        )
+        return {
+            "conversation_id": existing.id,
+            "summary": first_assistant,
+            "created": False,
+        }
+
+    summary = await generate_day_summary(today)
+    conv_id = new_conversation()
+    save_conversation(
+        conv_id,
+        json.dumps([{"role": "assistant", "content": summary}]),
+        title=today,
+    )
+    return {"conversation_id": conv_id, "summary": summary, "created": True}
 
 
 async def generate_conversation_title(messages: list[dict]) -> str | None:

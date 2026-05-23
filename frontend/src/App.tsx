@@ -37,6 +37,7 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [showSettings, setShowSettings] = useState(false);
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
+  const [forcedConversationId, setForcedConversationId] = useState<number | null>(null);
   
   const CHAT_COLLAPSED_KEY = 'chatCollapsed'
   const [chatCollapsed, setChatCollapsed] = useState<boolean>(() => {
@@ -70,6 +71,24 @@ function App() {
   useEffect(() => {
     fetchTasks();
   }, [viewMode, selectedDate]);
+
+  // Day-summary trigger: when day view is active for today, ask backend for the
+  // day summary. If created=true, switch ChatInterface to that conversation.
+  useEffect(() => {
+    if (viewMode !== 'day' || selectedDate !== todayStr) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/day-summary`, { method: 'POST' });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.created === true && typeof data.conversation_id === 'number') {
+          setForcedConversationId(data.conversation_id);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [viewMode, selectedDate, todayStr]);
 
   async function fetchTasks() {
     try {
@@ -130,7 +149,7 @@ function App() {
           onDateChange={setSelectedDate}
           onTasksUpdate={handleTasksUpdate}
         />
-        <ChatInterface onTasksUpdate={handleTasksUpdate} collapsed={chatCollapsed} onToggleCollapse={handleToggleChat} />
+        <ChatInterface onTasksUpdate={handleTasksUpdate} collapsed={chatCollapsed} onToggleCollapse={handleToggleChat} forcedConversationId={forcedConversationId} />
       </main>
       {quickEntryOpen && (
         <QuickEntry

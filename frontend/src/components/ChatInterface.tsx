@@ -4,6 +4,7 @@ interface ChatInterfaceProps {
   onTasksUpdate: () => void
   collapsed: boolean
   onToggleCollapse: () => void
+  forcedConversationId: number | null
 }
 
 interface Message {
@@ -24,7 +25,7 @@ interface HistoryPopup {
 
 const API_URL = 'http://localhost:8000'
 
-function ChatInterface({ onTasksUpdate, collapsed, onToggleCollapse }: ChatInterfaceProps) {
+function ChatInterface({ onTasksUpdate, collapsed, onToggleCollapse, forcedConversationId }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [input, setInput] = useState('')
@@ -44,6 +45,15 @@ function ChatInterface({ onTasksUpdate, collapsed, onToggleCollapse }: ChatInter
       })
       .catch(() => {})
   }, [])
+
+  // External force: when App.tsx provides a conversation id (from /day-summary),
+  // switch to it. Null means "no override".
+  useEffect(() => {
+    if (forcedConversationId === null) return
+    switchConversation(forcedConversationId)
+    // switchConversation captures setters only; safe to omit from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcedConversationId])
 
   // Close history popup on outside click
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
   NEW_CONVERSATION,
   CHAT_RESPONSE,
   SETTINGS,
+  DAY_SUMMARY_CREATED,
 } from '../fixtures/tasks'
 
 type Handler = (url: string, init?: RequestInit) => Response
@@ -38,6 +39,13 @@ const DEFAULT_HANDLERS: Array<{ match: (url: string) => boolean; handler: Handle
   {
     match: (u) => u.endsWith('/tasks'),
     handler: () => jsonResponse(ALL_TASKS),
+  },
+  {
+    match: (u) => u.includes('/day-summary'),
+    handler: (_u, init) => {
+      if (init?.method === 'POST') return jsonResponse(DAY_SUMMARY_CREATED)
+      return jsonResponse({}, 405)
+    },
   },
   {
     match: (u) => u.includes('/conversation/new'),

@@ -157,3 +157,17 @@ export const SETTINGS = {
   default_priority: 'medium',
   conflict_resolution: 'overlap',
 }
+
+// Payload for POST /day-summary (created=true path)
+export const DAY_SUMMARY_CREATED = {
+  conversation_id: 42,
+  summary: 'A nice day.',
+  created: true,
+}
+
+// Payload for POST /day-summary (idempotent return path)
+export const DAY_SUMMARY_EXISTING = {
+  conversation_id: 99,
+  summary: 'Existing.',
+  created: false,
+}

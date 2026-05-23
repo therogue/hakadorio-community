@@ -582,3 +582,60 @@ def update_conversation_title(conversation_id: int, title: str):
             conv.title = title
             session.commit()
 
+
+def find_conversation_by_title_substring(substring: str) -> Optional[Conversation]:
+    """Return most recent Conversation whose title contains the substring, or None."""
+    with Session(engine) as session:
+        conv = session.exec(
+            select(Conversation)
+            .where(Conversation.title.contains(substring))
+            .order_by(Conversation.updated_at.desc())
+        ).first()
+        return conv.model_copy() if conv else None
+
+
+def build_day_summary_facts(today: str) -> dict:
+    """Structured facts powering the day-summary LLM prompt.
+    Assumption: today is YYYY-MM-DD (server-local).
+    Returns dict with meeting_count, first_meeting_time, last_meeting_time,
+    top_priority_title, total_duration_minutes, overdue_count.
+    first/last meeting times are start times (HH:MM) sorted ascending.
+    """
+    all_tasks = get_all_tasks()
+    meetings: list[Task] = []
+    today_tasks: list[Task] = []  # non-meeting, non-template, scheduled today
+    for t in all_tasks:
+        if t.is_template or not t.scheduled_date:
+            continue
+        if t.scheduled_date[:10] != today:
+            continue
+        if t.category == "M":
+            meetings.append(t)
+        else:
+            today_tasks.append(t)
+
+    timed_meetings = [m for m in meetings if "T" in (m.scheduled_date or "")]
+    timed_meetings.sort(key=lambda m: m.scheduled_date[11:16])
+    first_meeting_time = timed_meetings[0].scheduled_date[11:16] if timed_meetings else None
+    last_meeting_time = timed_meetings[-1].scheduled_date[11:16] if timed_meetings else None
+
+    top_task: Optional[Task] = None
+    for t in today_tasks:
+        if t.priority is None or t.completed:
+            continue
+        if top_task is None or (t.priority or 0) > (top_task.priority or 0):
+            top_task = t
+    top_priority_title = top_task.title if top_task else None
+
+    total_duration_minutes = sum((t.duration_minutes or 0) for t in (meetings + today_tasks))
+    overdue_count = len(get_overdue_tasks(today))
+
+    return {
+        "meeting_count": len(meetings),
+        "first_meeting_time": first_meeting_time,
+        "last_meeting_time": last_meeting_time,
+        "top_priority_title": top_priority_title,
+        "total_duration_minutes": total_duration_minutes,
+        "overdue_count": overdue_count,
+    }
+
