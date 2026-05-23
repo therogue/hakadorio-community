@@ -1,6 +1,5 @@
-from typing import Annotated, Optional
+from typing import Optional
 from sqlmodel import SQLModel, Field
-from pydantic import field_validator
 
 
 # --- Table models (ORM + Pydantic) ---
@@ -66,16 +65,6 @@ class UserSettingsUpdate(SQLModel):
     default_priority: Optional[str] = None
     conflict_resolution: Optional[str] = None
 
-
-class BulkMoveToBacklogRequest(SQLModel):
-    task_ids: list[str]
-
-    @field_validator("task_ids")
-    @classmethod
-    def task_ids_non_empty(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("task_ids must not be empty")
-        return v
 
 
 class Message(SQLModel):
