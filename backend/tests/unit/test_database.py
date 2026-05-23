@@ -17,13 +17,16 @@ from database import (
     get_overdue_tasks,
     find_task_by_title_db,
     find_task_by_key_db,
+    find_conversation_by_title_substring,
     get_next_task_number,
     calculate_next_occurrence,
     get_conversation,
     save_conversation,
     new_conversation,
+    update_conversation_title,
     get_user_settings,
     update_user_settings,
+    build_day_summary_facts,
 )
 import database
 from models import Task
@@ -523,6 +526,118 @@ class TestConversation:
         result = get_conversation()
         assert result["id"] == conv_id
         assert len(result["messages"]) == 3
+
+
+class TestFindConversationByTitleSubstring:
+    """Tests for find_conversation_by_title_substring (used by /day-summary).
+
+    Iteration 1: existence + happy-path. Edges (no-match, embedded, most-recent)
+    deferred to iteration 2.
+    """
+
+    def test_returns_match_when_title_contains_substring(self, test_db):
+        conv_id = new_conversation()
+        update_conversation_title(conv_id, "2026-05-02")
+
+        result = find_conversation_by_title_substring("2026-05-02")
+        assert result is not None
+        assert result.id == conv_id
+
+    def test_returns_none_when_no_match(self, test_db):
+        """Characterization: no conversation contains the substring → None.
+        Required by AC2: endpoint must distinguish 'create' from 'return existing'.
+        """
+        conv_id = new_conversation()
+        update_conversation_title(conv_id, "Random title")
+
+        result = find_conversation_by_title_substring("2026-05-02")
+        assert result is None
+
+    def test_matches_embedded_substring(self, test_db):
+        """Characterization: substring need not equal the whole title.
+        Required by AC2: title is set to YYYY-MM-DD verbatim, but a future title
+        like 'Notes for 2026-05-02 standup' should still match.
+        """
+        conv_id = new_conversation()
+        update_conversation_title(conv_id, "Notes for 2026-05-02 standup")
+
+        result = find_conversation_by_title_substring("2026-05-02")
+        assert result is not None
+        assert result.id == conv_id
+
+    def test_returns_most_recent_when_multiple_match(self, test_db):
+        """Characterization: when multiple conversations match, return most-recently-updated.
+        Guards AC2 idempotency from picking an arbitrary stale conv if user title-renamed
+        a previous day's conv to today's date.
+        """
+        import time
+
+        older_id = new_conversation()
+        update_conversation_title(older_id, "2026-05-02")
+        save_conversation(older_id, json.dumps([{"role": "user", "content": "older"}]))
+
+        # Sleep to ensure isoformat timestamps differ
+        time.sleep(0.01)
+
+        newer_id = new_conversation()
+        update_conversation_title(newer_id, "2026-05-02")
+        save_conversation(newer_id, json.dumps([{"role": "user", "content": "newer"}]))
+
+        result = find_conversation_by_title_substring("2026-05-02")
+        assert result is not None
+        assert result.id == newer_id
+
+
+class TestBuildDaySummaryFacts:
+    """Tests for build_day_summary_facts: structured dict used by the day-summary LLM prompt.
+
+    Iteration 1: empty-shape baseline + a single happy-path arrange covering all fields.
+    Edge cases (e.g. completed top-priority excluded) deferred to iteration 2.
+    """
+
+    def test_empty_day(self, test_db):
+        facts = build_day_summary_facts("2026-05-02")
+        assert facts["meeting_count"] == 0
+        assert facts["first_meeting_time"] is None
+        assert facts["last_meeting_time"] is None
+        assert facts["top_priority_title"] is None
+        assert facts["total_duration_minutes"] == 0
+        assert facts["overdue_count"] == 0
+
+    def test_full_day_facts(self, test_db):
+        """Single arrange exercising all five fact fields together."""
+        # 3 meetings spanning 09:00-15:30
+        create_task_db("m1", "Standup", "M", "2026-05-02T09:00", duration_minutes=15)
+        create_task_db("m2", "1:1", "M", "2026-05-02T11:00", duration_minutes=30)
+        create_task_db("m3", "Review", "M", "2026-05-02T15:30", duration_minutes=60)
+        # Today's tasks with varied priority — Critical wins
+        create_task_db("t1", "Low priority", "T", "2026-05-02", priority=1, duration_minutes=15)
+        create_task_db("t2", "Critical thing", "T", "2026-05-02", priority=4, duration_minutes=45)
+        # Overdue: 2 incomplete past-scheduled non-meeting tasks
+        create_task_db("o1", "Old 1", "T", "2026-04-30", duration_minutes=15)
+        create_task_db("o2", "Old 2", "T", "2026-05-01", duration_minutes=15)
+
+        facts = build_day_summary_facts("2026-05-02")
+        assert facts["meeting_count"] == 3
+        assert facts["first_meeting_time"] == "09:00"
+        assert facts["last_meeting_time"] == "15:30"
+        assert facts["top_priority_title"] == "Critical thing"
+        # 15 + 30 + 60 (meetings) + 15 + 45 (today tasks) = 165
+        assert facts["total_duration_minutes"] == 165
+        assert facts["overdue_count"] == 2
+
+    def test_completed_top_priority_excluded(self, test_db):
+        """A completed task must not be picked as top_priority_title; the highest-priority
+        incomplete task wins instead.
+        """
+        # Highest priority but completed
+        completed_top = create_task_db("c1", "Done critical", "T", "2026-05-02", priority=4, duration_minutes=15)
+        update_task_db(completed_top.id, completed=True)
+        # Lower priority but incomplete
+        create_task_db("c2", "Active high", "T", "2026-05-02", priority=3, duration_minutes=15)
+
+        facts = build_day_summary_facts("2026-05-02")
+        assert facts["top_priority_title"] == "Active high"
 
 
 class TestUserSettings:
